@@ -1,13 +1,21 @@
-import { useContext, useLayoutEffect } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { useContext, useLayoutEffect, useState } from "react";
+import { StyleSheet, View } from "react-native";
 import ExpenseForm from "../components/expenses/manageexpence/ExpenseForm";
-import CustomButton from "../components/UI/CustomButton";
+import ErrorOverlay from "../components/UI/ErrorOverlay";
 import IconButton from "../components/UI/IconButton";
+import LoadingOverlay from "../components/UI/LoadingOverlay";
 import { GlobalStyles } from "../constants/styles";
 import { ExpensesContext } from "../store/ExpensesContext";
+import {
+  deleteExpense,
+  storeExpenseData,
+  updateExpense,
+} from "../utils/httpUtil";
 
 const ManageExpenses = ({ route, navigation }) => {
   const expensesCtx = useContext(ExpensesContext);
+  const [isReqInprogress, setIsReqInprogress] = useState(false);
+  const [error, setError] = useState();
   const editedExpanseId = route?.params?.expenseId;
   const isEditing = !!editedExpanseId;
 
@@ -21,23 +29,50 @@ const ManageExpenses = ({ route, navigation }) => {
     });
   }, [navigation, isEditing]);
 
-  const deleteExpanseHandler = () => {
-    expensesCtx.removeExpense(editedExpanseId);
-    navigation.goBack();
+  const deleteExpanseHandler = async () => {
+    setIsReqInprogress(true);
+    try {
+      await deleteExpense(editedExpanseId);
+      expensesCtx.removeExpense(editedExpanseId);
+      navigation.goBack();
+    } catch (error) {
+      setError("Error occured on delete");
+      setIsReqInprogress(false);
+    }
   };
 
   const cancleHandler = () => {
     navigation.goBack();
   };
 
-  const confirmHandler = (expenseData) => {
-    if (isEditing) {
-      expensesCtx.updateExpense(editedExpanseId, expenseData);
-    } else {
-      expensesCtx.addExpense(expenseData);
+  const confirmHandler = async (expenseData) => {
+    try {
+      if (isEditing) {
+        setIsReqInprogress(true);
+        await updateExpense(editedExpanseId, expenseData);
+        expensesCtx.updateExpense(editedExpanseId, expenseData);
+      } else {
+        setIsReqInprogress(true);
+        const id = await storeExpenseData(expenseData);
+        expensesCtx.addExpense({ ...expenseData, id: id });
+      }
+      navigation.goBack();
+    } catch (error) {
+      setError("Error occured on save/update");
+      setIsReqInprogress(false);
     }
-    navigation.goBack();
   };
+  const errorHandler = () => {
+    setError(null);
+  };
+
+  if (error && !isReqInprogress) {
+    return <ErrorOverlay message={error} onConfirm={errorHandler} />;
+  }
+
+  if (isReqInprogress) {
+    return <LoadingOverlay />;
+  }
   return (
     <View style={styles.container}>
       <ExpenseForm
